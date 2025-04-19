@@ -1,3 +1,301 @@
+
+
+---
+
+# API جاوااسکریپت Vite
+
+APIهای جاوااسکریپت Vite به‌طور کامل تایپ‌گذاری شده‌اند و توصیه می‌شود از TypeScript یا فعال‌سازی بررسی نوع در VS Code استفاده کنید تا از امکانات IntelliSense و اعتبارسنجی بهره ببرید.
+
+## `createServer`
+
+**امضای تابع:**
+
+```ts
+async function createServer(inlineConfig?: InlineConfig): Promise<ViteDevServer>
+```
+
+**مثال استفاده:**
+
+```ts
+import { fileURLToPath } from 'node:url'
+import { createServer } from 'vite'
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url))
+
+const server = await createServer({
+  configFile: false,
+  root: __dirname,
+  server: {
+    port: 1337,
+  },
+})
+await server.listen()
+
+server.printUrls()
+server.bindCLIShortcuts({ print: true })
+```
+
+::: tip نکته
+هنگام استفاده از `createServer` و `build` در یک فرآیند Node.js، هر دو تابع به `process.env.NODE_ENV` وابسته هستند. برای جلوگیری از رفتارهای متناقض، مقدار `process.env.NODE_ENV` یا گزینه `mode` را به `development` تنظیم کنید. در غیر این صورت، می‌توانید هر کدام را در یک child process مجزا اجرا کنید.
+:::
+
+::: tip نکته
+وقتی از [حالت میانی (middleware mode)](/config/server-options.html#server-middlewaremode) همراه با [پیکربندی پراکسی برای WebSocket](/config/server-options.html#server-proxy) استفاده می‌کنید، باید سرور والد (parent server) را در `middlewareMode` وارد کنید تا پراکسی به‌درستی متصل شود.
+
+<details>
+<summary>مثال</summary>
+
+```ts
+import http from 'http'
+import { createServer } from 'vite'
+
+const parentServer = http.createServer()
+
+const vite = await createServer({
+  server: {
+    middlewareMode: {
+      server: parentServer,
+    },
+    proxy: {
+      '/ws': {
+        target: 'ws://localhost:3000',
+        ws: true,
+      },
+    },
+  },
+})
+
+parentServer.use(vite.middlewares)
+```
+
+</details>
+:::
+
+---
+
+## `InlineConfig`
+
+رابط `InlineConfig` از `UserConfig` توسعه یافته و ویژگی‌های اضافی دارد:
+
+- `configFile`: مشخص کردن فایل پیکربندی مورد نظر. اگر تنظیم نشود، Vite سعی می‌کند به‌طور خودکار از مسیر ریشه پروژه فایل را پیدا کند. مقدار `false` باعث می‌شود این قابلیت غیرفعال شود.
+
+---
+
+## `ResolvedConfig`
+
+همه ویژگی‌های `UserConfig` را دارد ولی بیشتر آنها مقداردهی شده و غیر‌مبهم هستند. همچنین ابزارهایی مثل موارد زیر را دارد:
+
+- `config.assetsInclude`: بررسی اینکه آیا یک `id` به عنوان asset محسوب می‌شود.
+- `config.logger`: logger داخلی Vite.
+
+---
+
+## `ViteDevServer`
+
+رابطی با ویژگی‌های زیر:
+
+- `config`: پیکربندی نهایی شده Vite
+- `middlewares`: اپلیکیشن Connect که می‌توان middlewareها را به آن اضافه کرد.
+- `httpServer`: نمونه http server نیتیو (در حالت middleware مقدار آن null است).
+- `watcher`: ناظر فایل‌ها با استفاده از chokidar.
+- `ws`: سرور WebSocket داخلی.
+- `pluginContainer`: ظرف پلاگین‌ها برای اجرای hookها.
+- `moduleGraph`: گراف ماژول‌ها (برای HMR و مدیریت وابستگی‌ها).
+- `resolvedUrls`: URLهای نهایی که CLI چاپ می‌کند.
+- `transformRequest`, `transformIndexHtml`, `ssrLoadModule`, `ssrFixStacktrace`, `reloadModule`, `listen`, `restart`, `close`, `bindCLIShortcuts`, `waitForRequestsIdle` نیز متدهای مفیدی هستند که قابلیت‌های مختلفی مانند HMR، SSR و مدیریت lifecycle سرور را فراهم می‌کنند.
+
+---
+
+## `build`
+
+**امضای تابع:**
+
+```ts
+async function build(
+  inlineConfig?: InlineConfig,
+): Promise<RollupOutput | RollupOutput[]>
+```
+
+**مثال استفاده:**
+
+```ts
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { build } from 'vite'
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url))
+
+await build({
+  root: path.resolve(__dirname, './project'),
+  base: '/foo/',
+  build: {
+    rollupOptions: {
+      // ...
+    },
+  },
+})
+```
+
+---
+
+## `preview`
+
+**امضای تابع:**
+
+```ts
+async function preview(inlineConfig?: InlineConfig): Promise<PreviewServer>
+```
+
+**مثال استفاده:**
+
+```ts
+import { preview } from 'vite'
+
+const previewServer = await preview({
+  preview: {
+    port: 8080,
+    open: true,
+  },
+})
+
+previewServer.printUrls()
+previewServer.bindCLIShortcuts({ print: true })
+```
+
+---
+
+## `PreviewServer`
+
+ویژگی‌ها:
+
+- `config`, `middlewares`, `httpServer`, `resolvedUrls`
+- متدهای `printUrls()` و `bindCLIShortcuts()`
+
+---
+
+## `resolveConfig`
+
+```ts
+async function resolveConfig(
+  inlineConfig: InlineConfig,
+  command: 'build' | 'serve',
+  defaultMode = 'development',
+  defaultNodeEnv = 'development',
+  isPreview = false,
+): Promise<ResolvedConfig>
+```
+
+مقدار `command` در حالت dev و preview برابر `serve` است، و در build برابر `build`.
+
+---
+
+## `mergeConfig`
+
+```ts
+function mergeConfig(
+  defaults: Record<string, any>,
+  overrides: Record<string, any>,
+  isRoot = true,
+): Record<string, any>
+```
+
+برای ادغام دو پیکربندی Vite به‌کار می‌رود.
+
+---
+
+## `searchForWorkspaceRoot`
+
+```ts
+function searchForWorkspaceRoot(
+  current: string,
+  root = searchForPackageRoot(current),
+): string
+```
+
+به دنبال ریشه workspace می‌گردد اگر یکی از شرایط زیر برقرار باشد:
+
+- فیلد `workspaces` در `package.json` وجود داشته باشد.
+- فایل‌هایی مانند `lerna.json` یا `pnpm-workspace.yaml` در مسیر موجود باشد.
+
+---
+
+## `loadEnv`
+
+```ts
+function loadEnv(
+  mode: string,
+  envDir: string,
+  prefixes: string | string[] = 'VITE_',
+): Record<string, string>
+```
+
+متغیرهای محیطی را از فایل `.env` در دایرکتوری مشخص‌شده بارگذاری می‌کند.
+
+---
+
+## `normalizePath`
+
+```ts
+function normalizePath(id: string): string
+```
+
+مسیرها را نرمال‌سازی می‌کند تا در پلاگین‌های Vite قابل استفاده باشند.
+
+---
+
+## `transformWithEsbuild`
+
+```ts
+async function transformWithEsbuild(
+  code: string,
+  filename: string,
+  options?: EsbuildTransformOptions,
+  inMap?: object,
+): Promise<ESBuildTransformResult>
+```
+
+کدی را با esbuild ترنسفورم می‌کند (برای جاوااسکریپت یا TypeScript). مناسب برای پلاگین‌ها.
+
+---
+
+## `loadConfigFromFile`
+
+```ts
+async function loadConfigFromFile(
+  configEnv: ConfigEnv,
+  configFile?: string,
+  configRoot: string = process.cwd(),
+  logLevel?: LogLevel,
+  customLogger?: Logger,
+): Promise<{
+  path: string
+  config: UserConfig
+  dependencies: string[]
+} | null>
+```
+
+فایل پیکربندی Vite را به صورت دستی بارگذاری می‌کند.
+
+---
+
+## `preprocessCSS` (آزمایشی)
+
+```ts
+async function preprocessCSS(
+  code: string,
+  filename: string,
+  config: ResolvedConfig,
+): Promise<PreprocessCSSResult>
+```
+
+فایل‌های CSS و پیش‌پردازنده‌ها (مانند SCSS، LESS و غیره) را به CSS معمولی تبدیل می‌کند. اگر نام فایل به `.module.{ext}` ختم شود، به عنوان CSS ماژول پردازش می‌شود.
+
+---
+
+اگر خواستی ادامه بدم با مثال‌های واقعی یا توضیح بیشتر درباره هر API، کافیه بگی.
+
+
+
 # JavaScript API
 
 Vite's JavaScript APIs are fully typed, and it's recommended to use TypeScript or enable JS type checking in VS Code to leverage the intellisense and validation.
